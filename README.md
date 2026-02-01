@@ -1,7 +1,7 @@
 # Priority Task Manager
 
-**Created by:** [Your Name]  
-**Date:** December 3, 2024  
+**Created by:** Alonso Bardales  
+**Date:** December 3, 2025 
 **Course:** Apple Swift Programming  
 **Assignment:** Student 3 - iPhone App Project
 
