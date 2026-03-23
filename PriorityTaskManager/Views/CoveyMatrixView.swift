@@ -27,7 +27,7 @@ struct CoveyMatrixView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.systemGray6))
+                .background(Color(.secondarySystemGroupedBackground))
                 
                 // Matrix grid
                 GeometryReader { geometry in
@@ -82,6 +82,7 @@ struct CoveyMatrixView: View {
                 AddTaskView()
             }
         }
+        .navigationViewStyle(.stack)
     }
 }
 
@@ -153,7 +154,7 @@ struct QuadrantView: View {
             }
         }
         .frame(width: width, height: height)
-        .background(quadrantColor.opacity(0.2))
+        .background(quadrantColor.opacity(0.12))
     }
     
     private var quadrantColor: Color {

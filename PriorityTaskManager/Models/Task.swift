@@ -22,7 +22,12 @@ struct Task: Identifiable, Codable {
     var isCompleted: Bool
     var createdDate: Date
     var subPriority: Int? // For A-1, A-2, etc.
-    
+    var groupId: UUID?
+    var scheduleIds: [UUID]
+    var scheduledDate: Date?
+    var scheduledStartTime: String?
+    var scheduledEndTime: String?
+
     // Initializer with default values
     init(
         id: UUID = UUID(),
@@ -34,7 +39,12 @@ struct Task: Identifiable, Codable {
         dueDate: Date? = nil,
         isCompleted: Bool = false,
         createdDate: Date = Date(),
-        subPriority: Int? = nil
+        subPriority: Int? = nil,
+        groupId: UUID? = nil,
+        scheduleIds: [UUID] = [],
+        scheduledDate: Date? = nil,
+        scheduledStartTime: String? = nil,
+        scheduledEndTime: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -46,6 +56,31 @@ struct Task: Identifiable, Codable {
         self.isCompleted = isCompleted
         self.createdDate = createdDate
         self.subPriority = subPriority
+        self.groupId = groupId
+        self.scheduleIds = scheduleIds
+        self.scheduledDate = scheduledDate
+        self.scheduledStartTime = scheduledStartTime
+        self.scheduledEndTime = scheduledEndTime
+    }
+
+    // Custom decoder for backward compatibility with saved data missing new fields
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        notes = try container.decode(String.self, forKey: .notes)
+        priority = try container.decode(Priority.self, forKey: .priority)
+        isUrgent = try container.decode(Bool.self, forKey: .isUrgent)
+        isImportant = try container.decode(Bool.self, forKey: .isImportant)
+        dueDate = try container.decodeIfPresent(Date.self, forKey: .dueDate)
+        isCompleted = try container.decode(Bool.self, forKey: .isCompleted)
+        createdDate = try container.decode(Date.self, forKey: .createdDate)
+        subPriority = try container.decodeIfPresent(Int.self, forKey: .subPriority)
+        groupId = try container.decodeIfPresent(UUID.self, forKey: .groupId)
+        scheduleIds = try container.decodeIfPresent([UUID].self, forKey: .scheduleIds) ?? []
+        scheduledDate = try container.decodeIfPresent(Date.self, forKey: .scheduledDate)
+        scheduledStartTime = try container.decodeIfPresent(String.self, forKey: .scheduledStartTime)
+        scheduledEndTime = try container.decodeIfPresent(String.self, forKey: .scheduledEndTime)
     }
     
     // Computed property to get Covey quadrant

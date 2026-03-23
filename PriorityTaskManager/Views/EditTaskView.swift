@@ -1,24 +1,16 @@
-//
-//  AddTaskView.swift
-//  PriorityTaskManager
-//
-//  Created by Alonso Bardales
-//  Date: December 3, 2024
-//
-//  View for adding a new task with validation
-//
-
 import SwiftUI
 
-struct AddTaskView: View {
+struct EditTaskView: View {
     @EnvironmentObject var taskManager: TaskManager
     @EnvironmentObject var taskGroupManager: TaskGroupManager
     @Environment(\.presentationMode) var presentationMode
     
+    let task: Task
+    
     // Task properties
     @State private var title: String = ""
     @State private var notes: String = ""
-    @State private var selectedPriority: Priority = .b
+    @State private var selectedPriority: Priority = .c
     @State private var isUrgent: Bool = false
     @State private var isImportant: Bool = false
     @State private var hasDueDate: Bool = false
@@ -33,10 +25,7 @@ struct AddTaskView: View {
     @State private var selectedInstanceId: UUID? = nil
     @State private var showInstancePicker = false
     
-    // AI Assistant
-    @StateObject private var aiAssistant = TaskAIAssistant()
-    @State private var aiInput: String = ""
-    @State private var aiReasoning: String = ""
+    @State private var hasLoaded = false
 
     // Validation
     @State private var showingAlert: Bool = false
@@ -45,62 +34,14 @@ struct AddTaskView: View {
     var body: some View {
         NavigationView {
             Form {
-                // AI Assistant section
-                Section(header: Text("AI Assistant")) {
-                    HStack(spacing: 8) {
-                        TextField("Describe your task...", text: $aiInput)
-                            .submitLabel(.done)
-                            .onSubmit { runAIFill() }
-
-                        Button {
-                            runAIFill()
-                        } label: {
-                            if aiAssistant.isLoading {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                    .frame(width: 44)
-                            } else {
-                                Text("Fill")
-                                    .fontWeight(.medium)
-                                    .frame(width: 44)
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(aiInput.isEmpty || aiAssistant.isLoading)
-                    }
-
-                    if aiAssistant.isDownloadingModel {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Downloading AI model (first time only, ~900 MB)…")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            ProgressView(value: aiAssistant.localModelProgress)
-                        }
-                    } else if aiAssistant.isLoading && !aiAssistant.isLocalModelReady {
-                        Text("Setting up AI model (one-time, takes ~3 min)…")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else if !aiReasoning.isEmpty {
-                        Text(aiReasoning)
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                    } else if let error = aiAssistant.errorMessage {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    } else {
-                        Text("Fields will be filled automatically — you can edit before saving")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-
                 // Basic information section
                 Section(header: Text("Task Information")) {
                     TextField("Title (Required)", text: $title)
-                    
+                        .autocorrectionDisabled()
+
                     TextEditor(text: $notes)
                         .frame(height: 100)
+                        .autocorrectionDisabled()
                         .overlay(
                             Group {
                                 if notes.isEmpty {
@@ -123,16 +64,14 @@ struct AddTaskView: View {
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     
-                    // Description of selected priority
-                    Text(selectedPriority.description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    // Sub-priority for A tasks
                     if selectedPriority == .a {
                         TextField("Sub-priority (e.g., 1, 2, 3)", text: $subPriority)
                             .keyboardType(.numberPad)
                     }
+                    
+                    Text(selectedPriority.description)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
                 // Covey Matrix section
@@ -140,15 +79,9 @@ struct AddTaskView: View {
                     Toggle("Urgent", isOn: $isUrgent)
                     Toggle("Important", isOn: $isImportant)
                     
-                    // Show which quadrant this will be in
-                    HStack {
-                        Text("Quadrant:")
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        Text(currentQuadrant.rawValue)
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    Text("Quadrant: \(currentQuadrant.rawValue)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
                 
                 // Due date section
@@ -165,13 +98,8 @@ struct AddTaskView: View {
                     Picker("Assign to Group", selection: $selectedGroupId) {
                         Text("None").tag(nil as UUID?)
                         ForEach(taskGroupManager.groups.filter { $0.isActive }) { group in
-                            HStack {
-                                if let icon = group.icon {
-                                    Text(icon)
-                                }
-                                Text(group.name)
-                            }
-                            .tag(group.id as UUID?)
+                            Text("\(group.icon ?? "") \(group.name)")
+                                .tag(group.id as UUID?)
                         }
                     }
                     
@@ -231,15 +159,48 @@ struct AddTaskView: View {
                 // Schedule section
                 Section(header: Text("Individual Schedule")) {
                     Toggle("Schedule on Calendar", isOn: $hasSchedule)
-                    
+
                     if hasSchedule {
                         DatePicker("Date", selection: $scheduledDate, displayedComponents: [.date])
+
+                        // Show existing time slots for the selected date
+                        let blocks = taskGroupManager.dayBlocks(for: scheduledDate)
+                        if !blocks.isEmpty {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("BOOKED TIME SLOTS")
+                                    .font(.caption2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.secondary)
+
+                                ForEach(blocks, id: \.scheduleId) { block in
+                                    HStack(spacing: 8) {
+                                        RoundedRectangle(cornerRadius: 2)
+                                            .fill(Color(hex: block.groupColor))
+                                            .frame(width: 4, height: 28)
+
+                                        VStack(alignment: .leading, spacing: 1) {
+                                            Text(block.groupName)
+                                                .font(.caption)
+                                                .fontWeight(.medium)
+                                            Text(formatTimeRange(block.startTime, block.endTime))
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+
+                                        Spacer()
+                                    }
+                                    .padding(.vertical, 2)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+
                         DatePicker("Start Time", selection: $scheduledStartTime, displayedComponents: [.hourAndMinute])
                         DatePicker("End Time", selection: $scheduledEndTime, displayedComponents: [.hourAndMinute])
                     }
                 }
             }
-            .navigationTitle("New Task")
+            .navigationTitle("Edit Task")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -264,7 +225,54 @@ struct AddTaskView: View {
             .sheet(isPresented: $showInstancePicker) {
                 instancePickerView
             }
+            .onAppear {
+                loadTaskData()
+            }
+            .onChange(of: selectedGroupId) { _ in
+                guard hasLoaded else { return }
+                // Clear stale schedule/instance selections when user switches groups
+                selectedScheduleIds.removeAll()
+                selectedInstanceId = nil
+            }
         }
+    }
+    
+    private func loadTaskData() {
+        title = task.title
+        notes = task.notes
+        selectedPriority = task.priority
+        isUrgent = task.isUrgent
+        isImportant = task.isImportant
+        hasDueDate = task.dueDate != nil
+        if let due = task.dueDate {
+            dueDate = due
+        }
+        if let sub = task.subPriority {
+            subPriority = String(sub)
+        }
+        selectedGroupId = task.groupId
+        selectedScheduleIds = Set(task.scheduleIds)
+        
+        hasSchedule = task.scheduledDate != nil
+        if let schedDate = task.scheduledDate {
+            scheduledDate = schedDate
+        }
+        
+        // Parse time strings to Date objects
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        
+        if let startTimeStr = task.scheduledStartTime,
+           let startTime = formatter.date(from: startTimeStr) {
+            scheduledStartTime = startTime
+        }
+        
+        if let endTimeStr = task.scheduledEndTime,
+           let endTime = formatter.date(from: endTimeStr) {
+            scheduledEndTime = endTime
+        }
+
+        hasLoaded = true
     }
     
     private func formatTimeRange(_ start: String, _ end: String) -> String {
@@ -358,32 +366,6 @@ struct AddTaskView: View {
         }
     }
     
-    // AI fill helpers
-    private func runAIFill() {
-        guard !aiInput.isEmpty else { return }
-        _Concurrency.Task { @MainActor in
-            if let suggestion = await aiAssistant.parseFreeformTask(aiInput) {
-                applyAISuggestion(suggestion)
-            }
-        }
-    }
-
-    private func applyAISuggestion(_ suggestion: TaskSuggestion) {
-        title = suggestion.title
-        notes = suggestion.notes
-        selectedPriority = suggestion.priority
-        isUrgent = suggestion.isUrgent
-        isImportant = suggestion.isImportant
-        if let sub = suggestion.subPriority {
-            subPriority = String(sub)
-        }
-        if let due = suggestion.dueDate {
-            hasDueDate = true
-            dueDate = due
-        }
-        aiReasoning = suggestion.reasoning
-    }
-
     // Save task with validation
     private func saveTask() {
         // Validate title is not empty
@@ -412,36 +394,52 @@ struct AddTaskView: View {
         let startTimeStr = hasSchedule ? formatter.string(from: scheduledStartTime) : nil
         let endTimeStr = hasSchedule ? formatter.string(from: scheduledEndTime) : nil
         
-        // Create new task
-        let newTask = Task(
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
-            priority: selectedPriority,
-            isUrgent: isUrgent,
-            isImportant: isImportant,
-            dueDate: hasDueDate ? dueDate : nil,
-            isCompleted: false,
-            subPriority: subPriorityInt,
-            groupId: selectedGroupId,
-            scheduleIds: Array(selectedScheduleIds),
-            scheduledDate: hasSchedule ? scheduledDate : nil,
-            scheduledStartTime: startTimeStr,
-            scheduledEndTime: endTimeStr
-        )
+        // Create updated task
+        var updatedTask = task
+        updatedTask.title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedTask.notes = notes.trimmingCharacters(in: .whitespacesAndNewlines)
+        updatedTask.priority = selectedPriority
+        updatedTask.isUrgent = isUrgent
+        updatedTask.isImportant = isImportant
+        updatedTask.dueDate = hasDueDate ? dueDate : nil
+        updatedTask.subPriority = subPriorityInt
+        updatedTask.groupId = selectedGroupId
+        updatedTask.scheduleIds = Array(selectedScheduleIds)
+
+        // If assigned to a group schedule, clear individual schedule to avoid double-rendering
+        if selectedGroupId != nil && !selectedScheduleIds.isEmpty {
+            updatedTask.scheduledDate = nil
+            updatedTask.scheduledStartTime = nil
+            updatedTask.scheduledEndTime = nil
+        } else {
+            updatedTask.scheduledDate = hasSchedule ? scheduledDate : nil
+            updatedTask.scheduledStartTime = startTimeStr
+            updatedTask.scheduledEndTime = endTimeStr
+        }
         
-        // Add task to manager
-        taskManager.addTask(newTask)
+        // Update task in manager
+        taskManager.updateTask(updatedTask)
         
         // Dismiss view
         presentationMode.wrappedValue.dismiss()
     }
 }
 
-struct AddTaskView_Previews: PreviewProvider {
+struct EditTaskView_Previews: PreviewProvider {
     static var previews: some View {
-        AddTaskView()
+        let sampleTask = Task(
+            title: "Sample Task",
+            notes: "Sample notes",
+            priority: .a,
+            isUrgent: true,
+            isImportant: true,
+            dueDate: nil,
+            isCompleted: false,
+            subPriority: nil
+        )
+        
+        return EditTaskView(task: sampleTask)
             .environmentObject(TaskManager())
             .environmentObject(TaskGroupManager())
     }
 }
-

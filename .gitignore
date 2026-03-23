@@ -46,3 +46,7 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots
 fastlane/test_output
+
+# Provisioning profiles (contain signing credentials — keep local only)
+*.mobileprovision
+provisioning_info.local.txt

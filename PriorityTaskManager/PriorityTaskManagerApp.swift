@@ -13,13 +13,48 @@ import SwiftUI
 
 @main
 struct PriorityTaskManagerApp: App {
-    // StateObject to manage tasks throughout the app lifecycle
     @StateObject private var taskManager = TaskManager()
-    
+    @StateObject private var taskGroupManager = TaskGroupManager()
+    @StateObject private var purchaseManager = PurchaseManager()
+
+    init() {
+        NotificationManager.shared.requestPermission()
+        setupNotificationObserver()
+    }
+
+    @AppStorage("hasSeenOnboarding") private var hasSeenOnboarding = false
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(taskManager)
+            if hasSeenOnboarding {
+                ContentView()
+                    .environmentObject(taskManager)
+                    .environmentObject(taskGroupManager)
+                    .environmentObject(purchaseManager)
+                    .onAppear {
+                        taskGroupManager.rescheduleNotifications(tasks: taskManager.tasks)
+                    }
+                    .task {
+                        await purchaseManager.checkPurchaseStatus()
+                    }
+            } else {
+                OnboardingView()
+                    .environmentObject(taskManager)
+                    .environmentObject(taskGroupManager)
+                    .environmentObject(purchaseManager)
+            }
+        }
+    }
+    
+    private func setupNotificationObserver() {
+        NotificationCenter.default.addObserver(
+            forName: .taskScheduleChanged,
+            object: nil,
+            queue: .main
+        ) { [self] notification in
+            if let tasks = notification.object as? [Task] {
+                taskGroupManager.rescheduleNotifications(tasks: tasks)
+            }
         }
     }
 }

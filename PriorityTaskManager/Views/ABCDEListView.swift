@@ -40,6 +40,13 @@ struct ABCDEListView: View {
                                 NavigationLink(destination: TaskDetailView(task: task)) {
                                     TaskRowView(task: task)
                                 }
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        taskManager.deleteTask(task)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                }
                             }
                         }
                     }
@@ -48,9 +55,19 @@ struct ABCDEListView: View {
                 // Show message if no tasks
                 if taskManager.activeTasks().isEmpty {
                     Section {
-                        Text("No active tasks. Tap + to add a new task.")
-                            .foregroundColor(.secondary)
-                            .italic()
+                        VStack(spacing: 12) {
+                            Image(systemName: "list.number")
+                                .font(.system(size: 40))
+                                .foregroundColor(.gray.opacity(0.4))
+                            Text("No Active Tasks")
+                                .font(.headline)
+                            Text("Tap + to create a task and assign it a priority from A (must do) to E (eliminate).")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24)
                     }
                 }
             }
@@ -68,6 +85,7 @@ struct ABCDEListView: View {
                 AddTaskView()
             }
         }
+        .navigationViewStyle(.stack)
     }
 }
 

@@ -14,6 +14,7 @@ struct AllTasksView: View {
     @EnvironmentObject var taskManager: TaskManager
     @State private var showingAddTask = false
     @State private var filterOption: FilterOption = .active
+    @State private var searchText = ""
     
     // Enum for filter options
     enum FilterOption: String, CaseIterable {
@@ -41,7 +42,6 @@ struct AllTasksView: View {
                             TaskRowView(task: task, showQuadrant: true)
                         }
                     }
-                    .onDelete(perform: deleteTasks)
                 }
                 
                 // Empty state message
@@ -68,25 +68,35 @@ struct AllTasksView: View {
                     }
                 }
                 
-                ToolbarItem(placement: .navigationBarLeading) {
-                    EditButton()
-                }
             }
+            .searchable(text: $searchText, prompt: "Search tasks")
             .sheet(isPresented: $showingAddTask) {
                 AddTaskView()
             }
         }
+        .navigationViewStyle(.stack)
     }
     
     // Computed property for filtered tasks
     private var filteredTasks: [Task] {
+        let base: [Task]
         switch filterOption {
         case .all:
-            return taskManager.tasks.sorted { $0.createdDate > $1.createdDate }
+            base = taskManager.tasks.sorted { $0.createdDate > $1.createdDate }
         case .active:
-            return taskManager.activeTasks()
+            base = taskManager.activeTasks()
         case .completed:
-            return taskManager.completedTasks()
+            base = taskManager.completedTasks()
+        }
+
+        if searchText.isEmpty {
+            return base
+        }
+
+        let query = searchText.lowercased()
+        return base.filter { task in
+            task.title.lowercased().contains(query) ||
+            task.notes.lowercased().contains(query)
         }
     }
     
@@ -102,13 +112,6 @@ struct AllTasksView: View {
         }
     }
     
-    // Delete tasks function
-    private func deleteTasks(at offsets: IndexSet) {
-        for index in offsets {
-            let task = filteredTasks[index]
-            taskManager.deleteTask(task)
-        }
-    }
 }
 
 struct AllTasksView_Previews: PreviewProvider {

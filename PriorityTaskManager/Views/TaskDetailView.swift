@@ -12,8 +12,8 @@ import SwiftUI
 
 struct TaskDetailView: View {
     @EnvironmentObject var taskManager: TaskManager
-    @Environment(\.presentationMode) var presentationMode
-    
+    @Environment(\.dismiss) private var dismiss
+
     let task: Task
     
     // Editing state
@@ -31,6 +31,9 @@ struct TaskDetailView: View {
     @State private var showingDeleteAlert: Bool = false
     @State private var showingValidationAlert: Bool = false
     @State private var alertMessage: String = ""
+    @State private var showBreathingExercise: Bool = false
+    @State private var showingSchedulePicker: Bool = false
+    @State private var scheduledDate: Date = Date()
     
     var body: some View {
         Form {
@@ -55,22 +58,19 @@ struct TaskDetailView: View {
                 }
             }
         }
-        .alert(isPresented: $showingDeleteAlert) {
-            Alert(
-                title: Text("Delete Task"),
-                message: Text("Are you sure you want to delete this task?"),
-                primaryButton: .destructive(Text("Delete")) {
-                    deleteTask()
-                },
-                secondaryButton: .cancel()
-            )
+        .alert("Delete Task", isPresented: $showingDeleteAlert) {
+            Button("Delete", role: .destructive) { deleteTask() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Are you sure you want to delete this task?")
         }
-        .alert(isPresented: $showingValidationAlert) {
-            Alert(
-                title: Text("Validation Error"),
-                message: Text(alertMessage),
-                dismissButton: .default(Text("OK"))
-            )
+        .alert("Validation Error", isPresented: $showingValidationAlert) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
+        .sheet(isPresented: $showBreathingExercise) {
+            BreathingExerciseView()
         }
     }
     
@@ -144,8 +144,8 @@ struct TaskDetailView: View {
             }
             
             // Due date
-            if let dueDate = task.dueDate {
-                Section(header: Text("Due Date")) {
+            Section(header: Text("Schedule")) {
+                if let dueDate = task.dueDate {
                     HStack {
                         Text("Due")
                             .foregroundColor(.secondary)
@@ -154,8 +154,50 @@ struct TaskDetailView: View {
                             .foregroundColor(isOverdue(dueDate) ? .red : .primary)
                     }
                 }
+                if showingSchedulePicker {
+                    DatePicker("Pick date", selection: $scheduledDate, displayedComponents: [.date, .hourAndMinute])
+                        .datePickerStyle(.graphical)
+                    HStack {
+                        Button("Cancel") {
+                            showingSchedulePicker = false
+                        }
+                        .foregroundColor(.secondary)
+                        Spacer()
+                        Button("Save") {
+                            var updated = task
+                            updated.dueDate = scheduledDate
+                            taskManager.updateTask(updated)
+                            showingSchedulePicker = false
+                        }
+                        .fontWeight(.semibold)
+                    }
+                } else {
+                    Button {
+                        scheduledDate = task.dueDate ?? Date()
+                        showingSchedulePicker = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "calendar.badge.plus")
+                            Text(task.dueDate == nil ? "Add to Schedule" : "Change Date")
+                        }
+                        .foregroundColor(.blue)
+                    }
+                }
             }
             
+            // Breathing Exercise
+            Section {
+                Button(action: {
+                    showBreathingExercise = true
+                }) {
+                    HStack {
+                        Image(systemName: "wind")
+                        Text("Breathing Exercise")
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+
             // Actions
             Section {
                 Button(action: {
@@ -167,7 +209,7 @@ struct TaskDetailView: View {
                     }
                     .foregroundColor(.blue)
                 }
-                
+
                 Button(action: {
                     showingDeleteAlert = true
                 }) {
@@ -187,9 +229,11 @@ struct TaskDetailView: View {
         Group {
             Section(header: Text("Task Information")) {
                 TextField("Title (Required)", text: $editedTitle)
-                
+                    .autocorrectionDisabled()
+
                 TextEditor(text: $editedNotes)
                     .frame(height: 100)
+                    .autocorrectionDisabled()
             }
             
             Section(header: Text("ABCDE Priority")) {
@@ -231,7 +275,7 @@ struct TaskDetailView: View {
         editedIsImportant = task.isImportant
         editedHasDueDate = task.dueDate != nil
         editedDueDate = task.dueDate ?? Date()
-        editedSubPriority = task.subPriority != nil ? String(task.subPriority!) : ""
+        editedSubPriority = task.subPriority.map { String($0) } ?? ""
         isEditing = true
     }
     
@@ -267,7 +311,7 @@ struct TaskDetailView: View {
     
     private func deleteTask() {
         taskManager.deleteTask(task)
-        presentationMode.wrappedValue.dismiss()
+        dismiss()
     }
     
     private func formatDate(_ date: Date) -> String {

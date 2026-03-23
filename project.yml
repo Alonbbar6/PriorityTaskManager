@@ -1,0 +1,33 @@
+name: PriorityTaskManager
+options:
+  bundleIdPrefix: com.alonsobardales.PriorityTaskManager
+  deploymentTarget:
+    iOS: "16.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: false
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1,2"
+targets:
+  PriorityTaskManager:
+    type: application
+    platform: iOS
+    sources:
+      - path: PriorityTaskManager
+        type: group
+    settings:
+      base:
+        INFOPLIST_GENERATION_MODE: GeneratedFile
+        PRODUCT_BUNDLE_IDENTIFIER: com.alonsobardales.PriorityTaskManager
+        MARKETING_VERSION: "2.1"
+        CURRENT_PROJECT_VERSION: "3"
+        GENERATE_INFOPLIST_FILE: true
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: true
+        INFOPLIST_KEY_UILaunchScreen_Generation: true
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        SWIFT_EMIT_LOC_STRINGS: true

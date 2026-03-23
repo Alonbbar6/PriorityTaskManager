@@ -13,21 +13,50 @@ import Foundation
 class TaskManager: ObservableObject {
     // Published property to notify views of changes
     @Published var tasks: [Task] = []
-    
+
     // UserDefaults key for persistence
     private let tasksKey = "SavedTasks"
-    
+    private let appVersionKey = "AppVersion"
+
     // Initializer loads tasks from UserDefaults
     init() {
+        checkAppVersion()
         loadTasks()
     }
+
+    // Check if app was updated and handle migration if needed
+    private func checkAppVersion() {
+        let currentVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        let savedVersion = UserDefaults.standard.string(forKey: appVersionKey)
+
+        if savedVersion == nil {
+            print("🆕 First launch of app (or first launch with version tracking)")
+        } else if savedVersion != currentVersion {
+            print("📱 App updated from \(savedVersion ?? "unknown") to \(currentVersion)")
+            print("   User data will be preserved across update")
+        } else {
+            print("✅ App version unchanged: \(currentVersion)")
+        }
+
+        // Save current version
+        UserDefaults.standard.set(currentVersion, forKey: appVersionKey)
+        UserDefaults.standard.synchronize()
+    }
     
+    // MARK: - Clear All Data
+
+    func clearAll() {
+        tasks = []
+        saveTasks()
+    }
+
     // MARK: - CRUD Operations
     
     // Create: Add a new task
     func addTask(_ task: Task) {
         tasks.append(task)
         saveTasks()
+        notifyScheduleChange()
     }
     
     // Read: Get tasks by priority
@@ -68,6 +97,7 @@ class TaskManager: ObservableObject {
         }
         tasks[index] = task
         saveTasks()
+        notifyScheduleChange()
     }
     
     // Delete: Remove a task
@@ -83,96 +113,97 @@ class TaskManager: ObservableObject {
         }
         tasks[index].isCompleted.toggle()
         saveTasks()
+        notifyScheduleChange()
     }
     
     // MARK: - Persistence
     
     // Save tasks to UserDefaults
     private func saveTasks() {
-        // Use guard to handle encoding errors
-        guard let encoded = try? JSONEncoder().encode(tasks) else {
-            print("Failed to encode tasks")
-            return
+        do {
+            let encoded = try JSONEncoder().encode(tasks)
+            UserDefaults.standard.set(encoded, forKey: tasksKey)
+
+            // Synchronize to ensure data is written immediately
+            UserDefaults.standard.synchronize()
+
+            print("✅ Tasks saved successfully (\(tasks.count) tasks)")
+        } catch {
+            print("❌ ERROR: Failed to encode tasks: \(error)")
+            print("   This is a critical error - data will not be persisted!")
         }
-        UserDefaults.standard.set(encoded, forKey: tasksKey)
     }
-    
+
     // Load tasks from UserDefaults
     private func loadTasks() {
-        // Use guard to safely unwrap and decode
-        guard let data = UserDefaults.standard.data(forKey: tasksKey),
-              let decoded = try? JSONDecoder().decode([Task].self, from: data) else {
-            // If no saved tasks, create sample tasks
-            createSampleTasks()
+        print("📂 Loading tasks from UserDefaults...")
+
+        guard let data = UserDefaults.standard.data(forKey: tasksKey) else {
+            print("ℹ️ No saved tasks found - first launch or data cleared")
+            tasks = []
             return
         }
-        tasks = decoded
+
+        print("📦 Found saved data (\(data.count) bytes)")
+
+        do {
+            let decoded = try JSONDecoder().decode([Task].self, from: data)
+            tasks = decoded
+            print("✅ Tasks loaded successfully (\(tasks.count) tasks)")
+        } catch {
+            print("❌ ERROR: Failed to decode tasks: \(error)")
+            print("   Saved data may be corrupted or from an incompatible version")
+            print("   Starting with empty task list to prevent crash")
+            tasks = []
+        }
     }
     
-    // MARK: - Sample Data
-    
-    // Create sample tasks for demonstration
-    private func createSampleTasks() {
-        let sampleTasks = [
-            Task(
-                title: "Complete project proposal",
-                notes: "Deadline for board meeting tomorrow",
-                priority: .a,
-                isUrgent: true,
-                isImportant: true,
-                subPriority: 1
-            ),
-            Task(
-                title: "Review quarterly reports",
-                notes: "Need to finish before Friday",
-                priority: .a,
-                isUrgent: true,
-                isImportant: true,
-                subPriority: 2
-            ),
-            Task(
-                title: "Plan next quarter strategy",
-                notes: "Important for long-term success",
-                priority: .b,
-                isUrgent: false,
-                isImportant: true
-            ),
-            Task(
-                title: "Return client phone call",
-                notes: "Non-critical but should respond",
-                priority: .b,
-                isUrgent: true,
-                isImportant: false
-            ),
-            Task(
-                title: "Coffee with colleague",
-                notes: "Nice to catch up",
-                priority: .c,
-                isUrgent: false,
-                isImportant: false
-            ),
-            Task(
-                title: "Organize team meeting notes",
-                notes: "Can be delegated to assistant",
-                priority: .d,
-                isUrgent: false,
-                isImportant: false
-            )
-        ]
-        
-        tasks = sampleTasks
-        saveTasks()
+    // MARK: - Group Queries
+
+    func tasksForGroup(_ groupId: UUID) -> [Task] {
+        tasks.filter { $0.groupId == groupId }
+            .sorted { $0.createdDate < $1.createdDate }
     }
-    
+
+    func tasksForGroupAndSchedule(_ groupId: UUID, scheduleId: UUID) -> [Task] {
+        tasks.filter { $0.groupId == groupId && $0.scheduleIds.contains(scheduleId) }
+            .sorted { $0.createdDate < $1.createdDate }
+    }
+
+    func scheduledTasksForDate(_ date: Date) -> [Task] {
+        let calendar = Calendar.current
+        return tasks.filter { task in
+            guard let scheduledDate = task.scheduledDate else { return false }
+            return calendar.isDate(scheduledDate, inSameDayAs: date)
+        }
+        .sorted { task1, task2 in
+            guard let time1 = task1.scheduledStartTime,
+                  let time2 = task2.scheduledStartTime else {
+                return task1.createdDate < task2.createdDate
+            }
+            return time1 < time2
+        }
+    }
+
     // MARK: - Utility Methods
-    
+
     // Get count of tasks by priority
     func taskCount(for priority: Priority) -> Int {
         return tasksByPriority(priority).count
     }
-    
+
     // Get count of tasks by quadrant
     func taskCount(for quadrant: CoveyQuadrant) -> Int {
         return tasksByQuadrant(quadrant).count
     }
+    
+    // MARK: - Notifications
+    
+    private func notifyScheduleChange() {
+        NotificationCenter.default.post(name: .taskScheduleChanged, object: tasks)
+    }
+}
+
+extension Notification.Name {
+    static let taskScheduleChanged = Notification.Name("taskScheduleChanged")
 }
